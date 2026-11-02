@@ -1,4 +1,6 @@
 import json
+import time
+from app import usage
 from collections.abc import AsyncIterator
 from typing import Annotated
 
@@ -43,25 +45,42 @@ def sse(data: dict, event: str | None = None) -> str:
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest, provider: LLMDep) -> StreamingResponse:
+async def chat(request: ChatRequest, provider: LLMDep, settings: SettingsDep) -> StreamingResponse:
+    model_name = request.model or settings.llm_model
     llm_request = LLMRequest(
         messages=tuple(Message(role=message.role, content=message.content) for message in request.messages),
-        model=request.model,
+        model=model_name,
     )
 
     async def event_stream() -> AsyncIterator[str]:
-        usage = None
+        started = time.perf_counter()
+        usage_obj = None
+        failed = False
         try:
             async for chunk in provider.stream(llm_request):
                 if chunk.text:
                     yield sse({"delta": chunk.text})
                 if chunk.usage is not None:
-                    usage = chunk.usage
+                    usage_obj = chunk.usage
         except (LLMUnavailable, LLMConfigurationError) as error:
+            failed = True
             yield sse({"error": str(error)}, event="error")
-        usage_data = usage or {"input_tokens": 0, "output_tokens": 0, "estimated": False}
+        usage_data = usage_obj or {"input_tokens": 0, "output_tokens": 0, "estimated": False}
         if hasattr(usage_data, "__dict__"):
             usage_data = usage_data.__dict__
-        yield sse({"usage": usage_data, "cost_usd": 0.0}, event="done")
+        tokens_in = int(usage_data.get("input_tokens", 0))
+        tokens_out = int(usage_data.get("output_tokens", 0))
+        cost = usage.estimate_cost(
+            tokens_in, tokens_out, settings.llm_input_price_per_million, settings.llm_output_price_per_million
+        )
+        latency_ms = (time.perf_counter() - started) * 1000
+        if not failed:
+            usage.record(model_name, tokens_in, tokens_out, cost, latency_ms)
+        yield sse({"usage": usage_data, "cost_usd": cost, "latency_ms": round(latency_ms)}, event="done")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.get("/usage")
+def get_usage() -> dict:
+    return usage.summary()

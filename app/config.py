@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     llm_fallback_api_key: str = ""
     llm_timeout_seconds: float = 30.0
     llm_max_retries: int = 3
+    llm_input_price_per_million: float = 0.0
+    llm_output_price_per_million: float = 0.0
 
 
 @lru_cache
