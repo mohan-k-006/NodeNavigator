@@ -1,12 +1,12 @@
 import json
 import time
-from app import usage
 from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import StreamingResponse
 
+from app import usage
 from app.config import Settings, get_settings
 from app.llm.errors import LLMConfigurationError, LLMUnavailable
 from app.llm.factory import create_provider
