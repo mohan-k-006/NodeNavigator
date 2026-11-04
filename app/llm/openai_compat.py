@@ -6,7 +6,7 @@ import httpx
 from app.llm.types import LLMProvider, LLMRequest, ProviderError, TextChunk, Usage
 
 
-class OpenAICompatProvider(LLMProvider):
+class OpenAICompatProvider(LLMProvider):  
     """Streaming client for OpenAI-compatible /chat/completions endpoints."""
 
     def __init__(
